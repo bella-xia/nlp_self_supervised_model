@@ -141,7 +141,6 @@ class SentimentClassifier(nn.Module):
         preds = self.softmax(logits)
         label_one_hot = torch.nn.functional.one_hot(labels, -1)
         diff_mat = preds - label_one_hot
-
         loss = -torch.sum(label_one_hot * torch.log(preds)) / bsz
         grads_weights = (torch.transpose(diff_mat, 0, 1) @ inp) / bsz
         grads_bias = torch.sum(diff_mat, dim=0) / bsz

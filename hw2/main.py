@@ -25,14 +25,14 @@ def single_grad_descent(dev_d: Dict[str, List[Union[str, int]]],
 if __name__ == '__main__':
     # run ngram
     # uncomment the following line to run
-    # run_ngram()
+    run_ngram()
 
 
     # load raw data
     # uncomment the following line to run
-    dev_data, train_data, test_data = load_data()
+    # dev_data, train_data, test_data = load_data()
 
     # Run a single training run
     # uncomment the following line to run
-    single_grad_descent(dev_data, train_data, test_data)
+    # single_grad_descent(dev_data, train_data, test_data)
 
