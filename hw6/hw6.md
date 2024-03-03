@@ -26,10 +26,3 @@ You can create your own sbatch scripts to run the code.
 
 ### Submission
 Please follow the instructions in the homework pdf.
-
-
-### Code
-slurm-10134352.out, 10137613 : default 30 epoch
-slurm-10136622.out : 1e-4 lr; 7 epoch; 64 batch
-slurm-10136866.out : 5e-4 lr; 7 epoch; 64 batch
-slurm-10137313.out : 1e-3 lr; 7 epoch; 64 batch
