@@ -32,62 +32,87 @@ class CustomModelforSequenceClassification(nn.Module):
         
         if self.type == "full":
             # TODO: implement the forward function for the full model
-            raise NotImplementedError("You need to implement the forward function for the full model")
+            # raise NotImplementedError("You need to implement the forward function for the full model")
 
             # pass the input_ids and attention_mask into the model to get the output object (you can name it `output`)
+            output = self.model(input_ids, attention_mask)
 
             # get the last hidden state from the output object using `.last_hidden_state`
+            last_hid = output.last_hidden_state
 
             # take the mean of the last hidden state along the sequence length dimension
+            last_hid_mean = torch.mean(last_hid, dim=1)
 
             # pass the mean into the self.classifier to get the logits
+            logits = self.classifier(last_hid_mean)
 
             # your code ends here
 
         elif self.type == "head":
             # TODO: implement the forward function for the head-tuned model
-            raise NotImplementedError("You need to implement the forward function for the head-tuned model")
-            # Hint: it should be the same as the full model
+            # raise NotImplementedError("You need to implement the forward function for the head-tuned model")
+            # pass the input_ids and attention_mask into the model to get the output object (you can name it `output`)
+            output = self.model(input_ids, attention_mask)
 
-            # your code ends here
+            # get the last hidden state from the output object using `.last_hidden_state`
+            last_hid = output.last_hidden_state
+
+            # take the mean of the last hidden state along the sequence length dimension
+            last_hid_mean = torch.mean(last_hid, dim=1)
+
+            # pass the mean into the self.classifier to get the logits
+            logits = self.classifier(last_hid_mean)
         
         elif self.type == 'prefix':
 
             # TODO: implement the forward function for the prefix-tuned model
-            raise NotImplementedError("You need to implement the forward function for the prefix-tuned model")
+            # raise NotImplementedError("You need to implement the forward function for the prefix-tuned model")
 
             # the prefix is at self.prefix, but this is only one prefix, we want to append it to each instance in a batch
             # we make multiple copies of self.prefix here. the number of copies = batch size
-
+            prefix_mat = self.prefix.repeat(input_ids.shape[0], 1, 1)
 
             
             # concatentate the input embeddings and our prefix, make sure to put them into our gpu
             # get the input embeddings
             # Hint: you can use self.model.embeddings.word_embeddings to get the input embeddings
+            input_embeddings = self.model.embeddings.word_embeddings(input_ids)
+
 
             # concatenate the input embeddings and the prefix
             # Hint: check torch.cat for how to concatenate the tensors
+            inputs_embeds = torch.cat([prefix_mat, input_embeddings], dim=1)
 
             # move the input embeddings to the gpu
             # Hint: use .to(device='cuda') to move the tensor to the gpu
             # name the final tensor as `inputs_embeds`
+            inputs_embeds.to(device='cuda')
 
             
             # modify attention mask
             # we need to add the prefix to the attention mask
             # the mask on the prefix should be 1, with the dimension of (batch_size, prefix_length)
             # name the final attention mask as `attention_mask`
-
-
+            prefix_mask = torch.ones((input_ids.shape[0], prefix_length))
+            attention_mask = torch.cat([prefix_mask, attention_mask], dim=1)
 
             # pass the input embeddings and the attention mask into the model
             # you can do this by passing a keyword argument "inputs_embeds" to model.forward
+            output = self.model(inputs_embeds=inputs_embeds, attention_mask=attention_mask)
 
             # your code ends here
 
             # get the last hidden state from the output object, take the mean, and pass it into the classifier
             # Hint: same as the full model and head-tuned model
 
+            # get the last hidden state from the output object using `.last_hidden_state`
+            last_hid = output.last_hidden_state
+
+            # take the mean of the last hidden state along the sequence length dimension
+            last_hid_mean = torch.mean(last_hid, dim=1)
+
+            # pass the mean into the self.classifier to get the logits
+            logits = self.classifier(last_hid_mean)
 
 
             # your code ends here
@@ -176,16 +201,18 @@ def evaluate_model(model, dataloader, device):
     # iterate over the dataloader
     for batch in dataloader:
         # TODO: implement the evaluation function
-        raise NotImplementedError("You need to implement the evaluation function")
+        # raise NotImplementedError("You need to implement the evaluation function")
         # get the input_ids, attention_mask from the batch and put them on the device
         # Hints:
         # - see the getitem function in the BoolQADataset class for how to access the input_ids and attention_mask
         # - use to() to move the tensors to the device
-
-
+        input_ids = batch['input_ids'].to(device)
+        attention_mask = batch['attention_mask'].to(device)
+        
 
         # forward pass
         # name the output as `output`
+        output = model(input_ids, attention_mask)
 
         # your code ends here
 
@@ -225,9 +252,9 @@ def train(mymodel, num_epochs, train_dataloader, validation_dataloader, test_dat
 
     if mymodel.type == "head":
         # TODO: implement the optimizer for head-tuned model
-        raise NotImplementedError("You need to implement the optimizer for head-tuned model")
+        # raise NotImplementedError("You need to implement the optimizer for head-tuned model")
         # you need to get the parameters of the classifier (head), you can do this by calling mymodel.head.parameters()
-
+        custom_optimizer = torch.optim.AdamW(list(mymodel.classifier.parameters()), lr=lr)
         # then you need to pass these parameters to the optimizer
         # name the optimizer as `custom_optimizer`
         # Hints: you can refer to how we do this for the optimizer above
@@ -236,12 +263,14 @@ def train(mymodel, num_epochs, train_dataloader, validation_dataloader, test_dat
     
     elif mymodel.type == "prefix":
         # TODO: implement the optimizer for prefix-tuned model
-        raise NotImplementedError("You need to implement the optimizer for prefix-tuned model")
+        # raise NotImplementedError("You need to implement the optimizer for prefix-tuned model")
         # you need to get the parameters of the prefix, you can do this by calling mymodel.prefix
         # name the parameters as `prefix_params`
+        prefix_params = mymodel.prefix
 
         # you also need to get the parameters of the classifier (head), you can do this by calling mymodel.head.parameters()
         # name the parameters as `classifier_params`
+        classifier_params = mymodel.classifier.parameters()
 
         # your code ends here
         # group the parameters together
@@ -256,7 +285,7 @@ def train(mymodel, num_epochs, train_dataloader, validation_dataloader, test_dat
         num_training_steps=len(train_dataloader) * num_epochs
     )
 
-    loss = torch.nn.CrossEntropyLoss()
+    loss_fn = torch.nn.CrossEntropyLoss()
     
     epoch_list = []
     train_acc_list = []
@@ -292,10 +321,15 @@ def train(mymodel, num_epochs, train_dataloader, validation_dataloader, test_dat
             """
 
             # TODO: implement the training loop
-            raise NotImplementedError("You need to implement this function")
-
+            # raise NotImplementedError("You need to implement this function")
             # get the input_ids, attention_mask, and labels from the batch and put them on the device
             # Hints: similar to the evaluate_model function
+  
+           
+            # get the input_ids, attention_mask, and labels from the batch and put them on the device
+            # Hints: similar to the evaluate_model function
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
 
 
 
@@ -303,13 +337,16 @@ def train(mymodel, num_epochs, train_dataloader, validation_dataloader, test_dat
             # name the output as `output`
             # Hints: refer to the evaluate_model function on how to get the predictions (logits)
             # - It's slightly different from the implementation in train of base_classification.py
+            output = mymodel(input_ids, attention_mask)
+            predictions =  output['logits']
 
 
 
             # compute the loss using the loss function
-
+            loss = loss_fn(predictions, batch['labels'].to(device))
 
             # loss backward
+            loss.backward()
 
             # your code ends here
 
@@ -442,7 +479,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=5e-5)
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--device", type=str, default="cuda")
-    parser.add_argument("--model", type=str, default="bert-base-uncased")
+    parser.add_argument("--model", type=str, default="RoBERTa-base")
     parser.add_argument("--type", type=str, default="auto", choices=["auto", "full", "head", "prefix"], help="type of tuning to perform on the model")
     parser.add_argument("--prefix_length", type=int, default=128)
     args = parser.parse_args()
