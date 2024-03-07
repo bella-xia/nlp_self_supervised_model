@@ -11,6 +11,7 @@ import argparse
 import subprocess
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+from torch.profiler import profile, record_function, ProfilerActivity
 
 import time
 
@@ -76,7 +77,7 @@ class CustomModelforSequenceClassification(nn.Module):
             # concatentate the input embeddings and our prefix, make sure to put them into our gpu
             # get the input embeddings
             # Hint: you can use self.model.embeddings.word_embeddings to get the input embeddings
-            input_embeddings = self.model.embeddings.word_embeddings(input_ids)
+            input_embeddings = self.model.embeddings.word_embeddings(input_ids).to(device='cuda')
 
 
             # concatenate the input embeddings and the prefix
@@ -93,7 +94,7 @@ class CustomModelforSequenceClassification(nn.Module):
             # we need to add the prefix to the attention mask
             # the mask on the prefix should be 1, with the dimension of (batch_size, prefix_length)
             # name the final attention mask as `attention_mask`
-            prefix_mask = torch.ones((input_ids.shape[0], prefix_length))
+            prefix_mask = torch.ones((input_ids.shape[0], prefix_length)).to(device='cuda')
             attention_mask = torch.cat([prefix_mask, attention_mask], dim=1)
 
             # pass the input embeddings and the attention mask into the model
@@ -328,6 +329,7 @@ def train(mymodel, num_epochs, train_dataloader, validation_dataloader, test_dat
            
             # get the input_ids, attention_mask, and labels from the batch and put them on the device
             # Hints: similar to the evaluate_model function
+
             input_ids = batch['input_ids'].to(device)
             attention_mask = batch['attention_mask'].to(device)
 
@@ -337,27 +339,41 @@ def train(mymodel, num_epochs, train_dataloader, validation_dataloader, test_dat
             # name the output as `output`
             # Hints: refer to the evaluate_model function on how to get the predictions (logits)
             # - It's slightly different from the implementation in train of base_classification.py
-            output = mymodel(input_ids, attention_mask)
-            predictions =  output['logits']
+            if (epoch == 0) and (index == 0):
+                with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+                            profile_memory=True, record_shapes=True) as prof_fore:
+                    with record_function("forward"):
+                        output = mymodel(input_ids, attention_mask)
+                        predictions =  output['logits']
+                        loss = loss_fn(predictions, batch['labels'].to(device))
+                print("forward memory usage:")
+                print(prof_fore.key_averages().table(sort_by="cuda_memory_usage", row_limit=5))
 
-
-
-            # compute the loss using the loss function
-            loss = loss_fn(predictions, batch['labels'].to(device))
-
-            # loss backward
-            loss.backward()
-
-            # your code ends here
-
+                with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+                             profile_memory=True, record_shapes=True) as prof_back:
+                    with record_function("backward"):
+                        loss.backward()
+                        if mymodel.type == "full" or mymodel.type == "auto":
+                            optimizer.step()
+                        else:
+                            custom_optimizer.step()
+                print("backward memory usage:")
+                print(prof_back.key_averages().table(sort_by="cuda_memory_usage", row_limit=4))
+            else:
+                output = mymodel(input_ids, attention_mask)
+                predictions =  output['logits']
+                loss = loss_fn(predictions, batch['labels'].to(device))
+                loss.backward()
+                if mymodel.type == "full" or mymodel.type == "auto":
+                    optimizer.step()
+                else:
+                    custom_optimizer.step()
+            
+            lr_scheduler.step()
             # update the model parameters depending on the model type
             if mymodel.type == "full" or mymodel.type == "auto":
-                optimizer.step()
-                lr_scheduler.step()
                 optimizer.zero_grad()
             else:
-                custom_optimizer.step()
-                lr_scheduler.step()
                 custom_optimizer.zero_grad()
 
             predictions = torch.argmax(predictions, dim=1)
